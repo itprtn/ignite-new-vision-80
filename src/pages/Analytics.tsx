@@ -47,7 +47,7 @@ export default function AnalyticsPage() {
       setCampaigns([]) // Will be loaded from Supabase once campaigns table is ready
 
       // Calculate origin analytics
-      const originAnalytics = calculateOriginAnalytics(projetsData || [])
+      const originAnalytics = calculateOriginAnalytics(projetsData || [], contratsData || [])
       const commercialAnalytics = calculateCommercialAnalytics(projetsData || [], contratsData || [])
 
       // Calculate stats
@@ -70,9 +70,15 @@ export default function AnalyticsPage() {
     }
   }
 
-  const calculateOriginAnalytics = (projets: Projet[]) => {
+  const calculateOriginAnalytics = (projets: Projet[], contrats: Contrat[]) => {
     const originStats = projets.reduce((acc, projet) => {
-      const origine = projet.origine || 'Non spécifié'
+      let origine = projet.origine || 'Non spécifié'
+      
+      // Regrouper les origines contenant "Fb" sous "Facebook"
+      if (origine.toLowerCase().includes('fb')) {
+        origine = 'Facebook'
+      }
+      
       if (!acc[origine]) {
         acc[origine] = {
           total: 0,
@@ -81,6 +87,14 @@ export default function AnalyticsPage() {
         }
       }
       acc[origine].total += 1
+      
+      // Trouver les contrats liés à ce projet via contact_id
+      const relatedContracts = contrats.filter(c => c.contact_id === projet.contact_id)
+      if (relatedContracts.length > 0) {
+        acc[origine].converted += 1
+        acc[origine].revenue += relatedContracts.reduce((sum, c) => sum + (c.prime_brute_annuelle || 0), 0)
+      }
+      
       return acc
     }, {} as any)
 
