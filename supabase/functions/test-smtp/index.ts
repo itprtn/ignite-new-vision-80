@@ -25,6 +25,14 @@ serve(async (req: Request) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
+  // Headers CORS pour toutes les réponses
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': req.headers.get('Origin') || '*',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, DELETE, PUT',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept, apikey, x-client-info',
+    'Content-Type': 'application/json',
+  };
+
   try {
     console.log("🧪 Test SMTP - Démarrage...")
     
@@ -159,10 +167,7 @@ Cet email a été généré automatiquement par le système de test SMTP.
         }
       }),
       {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': req.headers.get('Origin') || '*',
-        },
+        headers: corsHeaders,
         status: 200,
       },
     )
@@ -180,11 +185,8 @@ Cet email a été généré automatiquement par le système de test SMTP.
         }
       }),
       {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': req.headers.get('Origin') || '*',
-        },
-        status: 500,
+        headers: corsHeaders,
+        status: 400, // Changé de 500 à 400 pour éviter les problèmes CORS
       },
     )
   }
