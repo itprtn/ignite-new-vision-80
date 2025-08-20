@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.55.0"
-import { Deno } from "https://deno.land/std@0.190.0/runtime.ts" // Declaring Deno variable
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
