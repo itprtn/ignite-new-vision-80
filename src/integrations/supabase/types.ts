@@ -14,6 +14,177 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_recommendations: {
+        Row: {
+          ai_data: Json | null
+          confidence_score: number | null
+          contact_id: number | null
+          created_at: string | null
+          description: string
+          id: number
+          priority: string | null
+          projet_id: number | null
+          recommendation_type: string
+          status: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          ai_data?: Json | null
+          confidence_score?: number | null
+          contact_id?: number | null
+          created_at?: string | null
+          description: string
+          id?: number
+          priority?: string | null
+          projet_id?: number | null
+          recommendation_type: string
+          status?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          ai_data?: Json | null
+          confidence_score?: number | null
+          contact_id?: number | null
+          created_at?: string | null
+          description?: string
+          id?: number
+          priority?: string | null
+          projet_id?: number | null
+          recommendation_type?: string
+          status?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      automation_actions: {
+        Row: {
+          action_config: Json
+          action_type: string
+          automation_id: number | null
+          created_at: string | null
+          delay_minutes: number | null
+          execution_order: number | null
+          id: number
+          is_active: boolean | null
+        }
+        Insert: {
+          action_config?: Json
+          action_type: string
+          automation_id?: number | null
+          created_at?: string | null
+          delay_minutes?: number | null
+          execution_order?: number | null
+          id?: number
+          is_active?: boolean | null
+        }
+        Update: {
+          action_config?: Json
+          action_type?: string
+          automation_id?: number | null
+          created_at?: string | null
+          delay_minutes?: number | null
+          execution_order?: number | null
+          id?: number
+          is_active?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_actions_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_executions: {
+        Row: {
+          actions_executed: number | null
+          automation_id: number | null
+          completed_at: string | null
+          error_message: string | null
+          execution_duration: number | null
+          id: number
+          started_at: string | null
+          status: string | null
+          total_actions: number | null
+          trigger_data: Json | null
+        }
+        Insert: {
+          actions_executed?: number | null
+          automation_id?: number | null
+          completed_at?: string | null
+          error_message?: string | null
+          execution_duration?: number | null
+          id?: number
+          started_at?: string | null
+          status?: string | null
+          total_actions?: number | null
+          trigger_data?: Json | null
+        }
+        Update: {
+          actions_executed?: number | null
+          automation_id?: number | null
+          completed_at?: string | null
+          error_message?: string | null
+          execution_duration?: number | null
+          id?: number
+          started_at?: string | null
+          status?: string | null
+          total_actions?: number | null
+          trigger_data?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_executions_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_triggers: {
+        Row: {
+          automation_id: number | null
+          created_at: string | null
+          id: number
+          is_active: boolean | null
+          trigger_conditions: Json | null
+          trigger_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          automation_id?: number | null
+          created_at?: string | null
+          id?: number
+          is_active?: boolean | null
+          trigger_conditions?: Json | null
+          trigger_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          automation_id?: number | null
+          created_at?: string | null
+          id?: number
+          is_active?: boolean | null
+          trigger_conditions?: Json | null
+          trigger_type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_triggers_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campagnes_email: {
         Row: {
           conditions_declenchement: Json | null
@@ -960,6 +1131,13 @@ export type Database = {
       declencher_automatisation: {
         Args: { p_automatisation_id: number; p_donnees_declencheur: Json }
         Returns: Json
+      }
+      execute_automation_trigger: {
+        Args: { p_trigger_data?: Json; p_trigger_type: string }
+        Returns: {
+          automation_count: number
+          execution_id: number
+        }[]
       }
       generate_client_code: {
         Args: Record<PropertyKey, never>
