@@ -17,6 +17,7 @@ import {
   Users, Target, Award, Calendar, Globe, Facebook, Smartphone
 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
+import { BulkStatusEmailDialog } from "./BulkStatusEmailDialog"
 
 interface Project {
   projet_id: number
@@ -80,7 +81,8 @@ export function ProjectsTab() {
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(12)
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
+const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
+  const [isBulkOpen, setIsBulkOpen] = useState(false)
 
   useEffect(() => {
     loadProjects()
@@ -254,7 +256,20 @@ export function ProjectsTab() {
       return matchesSearch && matchesStatus && matchesOrigin && matchesCommercial
     })
   }, [projects, searchTerm, statusFilter, originFilter, commercialFilter])
-
+  
+  const bulkRecipients = useMemo(() => (
+    filteredProjects
+      .filter(p => !!p.contact?.email)
+      .map(p => ({
+        projectId: p.projet_id,
+        contactId: p.contact?.identifiant,
+        email: p.contact!.email!,
+        prenom: p.contact?.prenom,
+        nom: p.contact?.nom,
+        civilite: p.contact?.civilite,
+      }))
+  ), [filteredProjects])
+  
   const totalPages = Math.ceil(filteredProjects.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedProjects = filteredProjects.slice(startIndex, startIndex + itemsPerPage)
@@ -616,20 +631,29 @@ export function ProjectsTab() {
               </SelectContent>
             </Select>
 
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSearchTerm("")
-                setStatusFilter("all")
-                setOriginFilter("all")
-                setCommercialFilter("all")
-                setCurrentPage(1)
-              }}
-              className="flex items-center space-x-2 rounded-xl"
-            >
-              <Filter className="w-4 h-4" />
-              <span>Réinitialiser</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearchTerm("")
+                  setStatusFilter("all")
+                  setOriginFilter("all")
+                  setCommercialFilter("all")
+                  setCurrentPage(1)
+                }}
+                className="flex items-center space-x-2 rounded-xl"
+              >
+                <Filter className="w-4 h-4" />
+                <span>Réinitialiser</span>
+              </Button>
+              <Button
+                onClick={() => setIsBulkOpen(true)}
+                disabled={statusFilter === "all" || bulkRecipients.length === 0}
+                className="rounded-xl"
+              >
+                Envoyer email (statut {statusFilter === "all" ? "—" : statusFilter}) • {bulkRecipients.length}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -807,6 +831,14 @@ export function ProjectsTab() {
           )}
         </DialogContent>
       </Dialog>
+      <BulkStatusEmailDialog
+        isOpen={isBulkOpen}
+        onOpenChange={setIsBulkOpen}
+        recipients={bulkRecipients}
+        statusName={statusFilter}
+        onComplete={loadProjects}
+      />
     </div>
   )
 }
+
