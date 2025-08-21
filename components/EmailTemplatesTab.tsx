@@ -26,6 +26,7 @@ export function EmailTemplatesTab({ templates, segments, onTemplateUpdate }: Ema
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
   const [isGeneratingAI, setIsGeneratingAI] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
   const { toast } = useToast()
 
   const [newTemplate, setNewTemplate] = useState({
@@ -34,7 +35,7 @@ export function EmailTemplatesTab({ templates, segments, onTemplateUpdate }: Ema
     contenu_html: '',
     contenu_texte: '',
     categorie: 'prospection',
-    statut: 'draft'
+    statut: 'active'
   })
 
   const filteredTemplates = templates.filter(template => {
@@ -46,32 +47,87 @@ export function EmailTemplatesTab({ templates, segments, onTemplateUpdate }: Ema
 
   const handleCreateTemplate = async () => {
     try {
-      const { error } = await supabase
-        .from('email_templates')
-        .insert([newTemplate])
+      if (isEditMode && selectedTemplate) {
+        const { error } = await supabase
+          .from('email_templates')
+          .update(newTemplate)
+          .eq('id', selectedTemplate.id)
+        
+        if (error) throw error
+        
+        toast({
+          title: "Template modifié",
+          description: "Le template a été modifié avec succès.",
+        })
+      } else {
+        const { error } = await supabase
+          .from('email_templates')
+          .insert([newTemplate])
 
-      if (error) throw error
+        if (error) throw error
 
-      toast({
-        title: "Template créé",
-        description: "Le nouveau template a été créé avec succès.",
-      })
+        toast({
+          title: "Template créé",
+          description: "Le nouveau template a été créé avec succès.",
+        })
+      }
 
       setIsCreateDialogOpen(false)
+      setIsEditMode(false)
+      setSelectedTemplate(null)
       setNewTemplate({
         nom: '',
         sujet: '',
         contenu_html: '',
         contenu_texte: '',
         categorie: 'prospection',
-        statut: 'draft'
+        statut: 'active'
       })
       onTemplateUpdate()
     } catch (error) {
-      console.error('Error creating template:', error)
+      console.error('Error saving template:', error)
       toast({
         title: "Erreur",
-        description: "Impossible de créer le template.",
+        description: "Impossible de sauvegarder le template.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleEditTemplate = (template: EmailTemplate) => {
+    setSelectedTemplate(template)
+    setNewTemplate({
+      nom: template.nom,
+      sujet: template.sujet,
+      contenu_html: template.contenu_html,
+      contenu_texte: template.contenu_texte || '',
+      categorie: template.categorie || 'prospection',
+      statut: template.statut || 'active'
+    })
+    setIsEditMode(true)
+    setIsCreateDialogOpen(true)
+  }
+
+  const handleDeleteTemplate = async (templateId: number) => {
+    try {
+      const { error } = await supabase
+        .from('email_templates')
+        .delete()
+        .eq('id', templateId)
+      
+      if (error) throw error
+      
+      toast({
+        title: "Template supprimé",
+        description: "Le template a été supprimé avec succès.",
+      })
+      
+      onTemplateUpdate()
+    } catch (error) {
+      console.error('Error deleting template:', error)
+      toast({
+        title: "Erreur",
+        description: "Impossible de supprimer le template.",
         variant: "destructive"
       })
     }
@@ -80,95 +136,97 @@ export function EmailTemplatesTab({ templates, segments, onTemplateUpdate }: Ema
   const generateAITemplates = async () => {
     setIsGeneratingAI(true)
     try {
-      // Templates IA prédéfinis pour l'assurance
-      const aiTemplates = [
-        {
-          nom: "Prospection Assurance Habitation",
-          sujet: "🏠 Protégez votre foyer avec notre assurance habitation",
-          contenu_html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #2563eb;">Bonjour {{prenom}},</h2>
-              <p>Votre domicile est votre bien le plus précieux. Avez-vous pensé à le protéger convenablement ?</p>
-              <p>Notre assurance habitation couvre :</p>
-              <ul>
-                <li>✅ Dégâts des eaux et incendies</li>
-                <li>✅ Vol et vandalisme</li>
-                <li>✅ Responsabilité civile</li>
-                <li>✅ Assistance 24h/24</li>
-              </ul>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="#" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">
-                  Demander un devis gratuit
-                </a>
-              </div>
-              <p>Cordialement,<br>{{commercial}}</p>
+      // Template IA spécifique pour assurance santé seniors - Premunia
+      const aiTemplate = {
+        nom: "Relance Assurance Santé Seniors - Premunia IA",
+        sujet: "Votre assurance santé seniors vous attend - Premunia",
+        contenu_html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; line-height: 1.6;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; font-size: 24px;">Premunia</h1>
+              <p style="margin: 5px 0 0 0; opacity: 0.9;">Votre courtier en assurance santé</p>
             </div>
-          `,
-          categorie: 'prospection',
-          statut: 'active'
-        },
-        {
-          nom: "Relance Prospect Non-Répondeur",
-          sujet: "Une dernière chance de protéger votre avenir",
-          contenu_html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #dc2626;">{{prenom}}, ne passez pas à côté de cette opportunité</h2>
-              <p>Je vous ai contacté récemment concernant votre protection sociale, mais je n'ai pas eu de retour de votre part.</p>
-              <p>Saviez-vous que :</p>
-              <ul>
-                <li>🔴 1 français sur 3 est sous-assuré</li>
-                <li>🔴 Les frais de santé augmentent de 3% par an</li>
-                <li>🔴 Un accident peut survenir à tout moment</li>
-              </ul>
-              <p><strong>Offre spéciale limitée :</strong> -20% sur votre première année d'assurance.</p>
+            
+            <div style="padding: 30px; background: white; border: 1px solid #e0e0e0; border-top: none;">
+              <p style="margin: 0 0 20px 0; font-size: 16px;">Bonjour {{prenom}},</p>
+              
+              <p style="margin: 0 0 20px 0;">Nous avons remarqué que vous n'avez pas encore répondu à notre proposition d'assurance santé adaptée aux seniors.</p>
+              
+              <h3 style="color: #667eea; margin: 25px 0 15px 0;">Pourquoi nous contacter maintenant ?</h3>
+              
+              <div style="margin: 20px 0;">
+                <p style="margin: 5px 0; color: #28a745;">✅ Devis gratuit et sans engagement</p>
+                <p style="margin: 5px 0; color: #28a745;">✅ Garanties complémentaires santé</p>
+                <p style="margin: 5px 0; color: #28a745;">✅ Accompagnement personnalisé</p>
+                <p style="margin: 5px 0; color: #28a745;">✅ Économies sur vos frais de santé</p>
+              </div>
+              
+              <p style="margin: 20px 0;">En tant que courtier spécialisé seniors, nous comprenons vos besoins et vous proposons des solutions adaptées.</p>
+              
               <div style="text-align: center; margin: 30px 0;">
-                <a href="#" style="background: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">
-                  Profiter de l'offre
-                </a>
+                <p style="font-size: 18px; color: #667eea; margin: 10px 0;">📞 Appelez-nous au 01 23 45 67 89</p>
+                <p style="margin: 10px 0;">Ou répondez à cet email pour un rappel immédiat.</p>
               </div>
-              <p style="font-size: 12px; color: #666;">Cette offre expire dans 48h.</p>
+              
+              <p style="margin: 25px 0 5px 0;">Cordialement,<br>
+              <strong>Votre courtier en assurance santé</strong></p>
             </div>
-          `,
-          categorie: 'relance',
-          statut: 'active'
-        },
-        {
-          nom: "Bienvenue Nouveau Client",
-          sujet: "🎉 Bienvenue chez {{nom_entreprise}} !",
-          contenu_html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #10b981;">Félicitations {{prenom}} !</h2>
-              <p>Nous sommes ravis de vous accueillir parmi nos clients.</p>
-              <p>Votre contrat <strong>{{produit}}</strong> est maintenant actif.</p>
-              <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3>Vos prochaines étapes :</h3>
-                <ol>
-                  <li>Téléchargez votre attestation dans votre espace client</li>
-                  <li>Sauvegardez nos contacts d'urgence</li>
-                  <li>Découvrez tous vos avantages client</li>
-                </ol>
+            
+            <div style="background: #f8f9fa; padding: 20px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
+              <h4 style="color: #667eea; margin: 0 0 15px 0;">📞 Contactez-nous :</h4>
+              <p style="margin: 5px 0;">Téléphone : 01 23 45 67 89</p>
+              <p style="margin: 5px 0;">Email : info@premunia.com</p>
+              <p style="margin: 5px 0;">Disponible du lundi au vendredi, 9h-18h</p>
+              
+              <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
+                <p style="margin: 0;">Cet email vous est envoyé par <strong>Premunia</strong>, votre courtier en assurance santé.</p>
               </div>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="#" style="background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">
-                  Accéder à mon espace
-                </a>
-              </div>
-              <p>Votre conseiller dédié : {{commercial}}<br>
-              📞 {{telephone}} | ✉️ {{email}}</p>
             </div>
-          `,
-          categorie: 'onboarding',
-          statut: 'active'
-        }
-      ]
+          </div>
+        `,
+        contenu_texte: `
+Bonjour {{prenom}},
 
-      for (const template of aiTemplates) {
-        await supabase.from('email_templates').insert([template])
+Nous avons remarqué que vous n'avez pas encore répondu à notre proposition d'assurance santé adaptée aux seniors.
+
+Pourquoi nous contacter maintenant ?
+
+✅ Devis gratuit et sans engagement
+✅ Garanties complémentaires santé  
+✅ Accompagnement personnalisé
+✅ Économies sur vos frais de santé
+
+En tant que courtier spécialisé seniors, nous comprenons vos besoins et vous proposons des solutions adaptées.
+
+📞 Appelez-nous au 01 23 45 67 89
+Ou répondez à cet email pour un rappel immédiat.
+
+Cordialement,
+Votre courtier en assurance santé
+
+📞 Contactez-nous :
+Téléphone : 01 23 45 67 89
+Email : info@premunia.com
+Disponible du lundi au vendredi, 9h-18h
+
+Cet email vous est envoyé par Premunia, votre courtier en assurance santé.
+        `,
+        categorie: 'relance',
+        statut: 'active',
+        variables: {
+          prenom: 'Prénom du contact',
+          nom: 'Nom du contact',
+          email: 'Email du contact'
+        }
       }
 
+      const { error } = await supabase.from('email_templates').insert([aiTemplate])
+      
+      if (error) throw error
+
       toast({
-        title: "Templates IA générés",
-        description: `${aiTemplates.length} templates intelligents ont été créés.`,
+        title: "Template IA Premunia généré",
+        description: "Template d'assurance santé seniors créé avec succès.",
       })
 
       onTemplateUpdate()
@@ -333,8 +391,20 @@ export function EmailTemplatesTab({ templates, segments, onTemplateUpdate }: Ema
                     >
                       <Copy size={14} />
                     </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleEditTemplate(template)}
+                    >
                       <Edit size={14} />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleDeleteTemplate(template.id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 size={14} />
                     </Button>
                   </div>
                 </div>
@@ -348,7 +418,9 @@ export function EmailTemplatesTab({ templates, segments, onTemplateUpdate }: Ema
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Créer un nouveau template</DialogTitle>
+            <DialogTitle>
+              {isEditMode ? 'Modifier le template' : 'Créer un nouveau template'}
+            </DialogTitle>
           </DialogHeader>
           
           <Tabs defaultValue="general" className="w-full">
@@ -447,11 +519,19 @@ export function EmailTemplatesTab({ templates, segments, onTemplateUpdate }: Ema
           </Tabs>
           
           <div className="flex justify-end gap-3 mt-6">
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+            <Button 
+              type="button"
+              variant="outline" 
+              onClick={() => {
+                setIsCreateDialogOpen(false)
+                setIsEditMode(false)
+                setSelectedTemplate(null)
+              }}
+            >
               Annuler
             </Button>
             <Button onClick={handleCreateTemplate}>
-              Créer le template
+              {isEditMode ? 'Modifier le template' : 'Créer le template'}
             </Button>
           </div>
         </DialogContent>

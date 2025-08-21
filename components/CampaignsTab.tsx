@@ -53,6 +53,8 @@ export function CampaignsTab({ campaigns, contacts, onCampaignUpdate }: Campaign
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [emailConfigs, setEmailConfigs] = useState<EmailConfig[]>([])
   const [campaignStats, setCampaignStats] = useState<any>({})
+  const [emailSentList, setEmailSentList] = useState<any[]>([])
+  const [showEmailDetails, setShowEmailDetails] = useState<number | null>(null)
 
   useEffect(() => {
     loadSegments()
@@ -106,14 +108,51 @@ export function CampaignsTab({ campaigns, contacts, onCampaignUpdate }: Campaign
     try {
       const stats: any = {}
       for (const campaign of campaigns) {
-        const { data, error } = await supabase.rpc("get_email_stats", { p_campagne_id: campaign.id })
-        if (!error && data && data.length > 0) {
-          stats[campaign.id] = data[0]
+        // Charger les stats de la campagne
+        const { data: statsData } = await supabase
+          .from('envois_email')
+          .select('*')
+          .eq('campagne_id', campaign.id)
+        
+        if (statsData) {
+          const totalSent = statsData.length
+          const opened = statsData.filter(e => e.date_ouverture).length
+          const clicked = statsData.filter(e => e.date_clic).length
+          const failed = statsData.filter(e => e.statut === 'echec').length
+          
+          stats[campaign.id] = {
+            total_sent: totalSent,
+            opened: opened,
+            clicked: clicked,
+            failed: failed,
+            open_rate: totalSent > 0 ? Math.round((opened / totalSent) * 100) : 0,
+            click_rate: totalSent > 0 ? Math.round((clicked / totalSent) * 100) : 0,
+            emails: statsData
+          }
         }
       }
       setCampaignStats(stats)
     } catch (error) {
       console.error("Error loading campaign stats:", error)
+    }
+  }
+
+  const loadEmailSentDetails = async (campaignId: number) => {
+    try {
+      const { data, error } = await supabase
+        .from('envois_email')
+        .select(`
+          *,
+          contact:contact_id (prenom, nom, email)
+        `)
+        .eq('campagne_id', campaignId)
+        .order('created_at', { ascending: false })
+      
+      if (error) throw error
+      setEmailSentList(data || [])
+      setShowEmailDetails(campaignId)
+    } catch (error) {
+      console.error("Error loading email details:", error)
     }
   }
 
@@ -347,10 +386,14 @@ export function CampaignsTab({ campaigns, contacts, onCampaignUpdate }: Campaign
                       Lancer
                     </Button>
                   )}
-                  {campaign.statut === "en_cours" && (
-                    <Button size="sm" variant="outline">
-                      <i className="fas fa-chart-line mr-1"></i>
-                      Stats
+                  {(campaign.statut === "en_cours" || campaign.statut === "terminee") && (
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => loadEmailSentDetails(campaign.id)}
+                    >
+                      <i className="fas fa-envelope mr-1"></i>
+                      Emails ({stats.total_sent || 0})
                     </Button>
                   )}
                 </div>
@@ -359,6 +402,122 @@ export function CampaignsTab({ campaigns, contacts, onCampaignUpdate }: Campaign
           )
         })}
       </div>
+
+      {/* Dialog des emails envoyés */}
+      <Dialog open={showEmailDetails !== null} onOpenChange={() => setShowEmailDetails(null)}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Détail des emails envoyés - Campagne {campaigns.find(c => c.id === showEmailDetails)?.nom}
+            </DialogTitle>
+          </DialogHeader>
+
+          {showEmailDetails && campaignStats[showEmailDetails] && (
+            <div className="space-y-6">
+              {/* KPIs de la campagne */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {campaignStats[showEmailDetails].total_sent || 0}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Emails envoyés</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {campaignStats[showEmailDetails].opened || 0}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Ouvertures</div>
+                    <div className="text-xs text-muted-foreground">
+                      {campaignStats[showEmailDetails].open_rate || 0}%
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {campaignStats[showEmailDetails].clicked || 0}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Clics</div>
+                    <div className="text-xs text-muted-foreground">
+                      {campaignStats[showEmailDetails].click_rate || 0}%
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-red-600">
+                      {campaignStats[showEmailDetails].failed || 0}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Échecs</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Liste des emails */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Liste des emails envoyés</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {emailSentList.map((email) => (
+                      <div 
+                        key={email.id} 
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                      >
+                        <div className="flex-1">
+                          <div className="font-medium">
+                            {email.contact?.prenom} {email.contact?.nom}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {email.email_destinataire}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Envoyé le {new Date(email.date_envoi || email.created_at).toLocaleString('fr-FR')}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={
+                              email.statut === 'envoye' ? 'default' :
+                              email.statut === 'echec' ? 'destructive' : 'secondary'
+                            }
+                          >
+                            {email.statut === 'envoye' ? 'Envoyé' : 
+                             email.statut === 'echec' ? 'Échec' : 'En attente'}
+                          </Badge>
+                          
+                          {email.date_ouverture && (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800">
+                              ✓ Ouvert
+                            </Badge>
+                          )}
+                          
+                          {email.date_clic && (
+                            <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                              ✓ Cliqué
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {emailSentList.length === 0 && (
+                      <div className="text-center text-muted-foreground py-8">
+                        Aucun email trouvé pour cette campagne
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
