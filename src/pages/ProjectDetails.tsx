@@ -211,7 +211,7 @@ export default function ProjectDetailsPage() {
             </TabsTrigger>
             <TabsTrigger value="communications" className="flex items-center space-x-2 rounded-xl">
               <MessageCircle className="w-4 h-4" />
-              <span>Communications</span>
+              <span>Communications ({interactions.length})</span>
             </TabsTrigger>
           </TabsList>
 
@@ -448,8 +448,72 @@ export default function ProjectDetailsPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="communications">
-            <ProjectEmailInterface projectId={projet.projet_id} />
+          <TabsContent value="communications" className="space-y-6">
+            {/* Historique des communications */}
+            <Card className="rounded-2xl border-0 shadow-md hover:shadow-lg transition-all duration-300">
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <MessageCircle className="w-5 h-5 mr-2" />
+                  Historique des Communications ({interactions.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {interactions.length > 0 ? (
+                  <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {interactions.map((interaction) => (
+                      <div key={interaction.id} className="flex items-start space-x-3 p-4 bg-muted/30 rounded-xl">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center space-x-2">
+                              <Badge variant="outline" className="capitalize">
+                                {interaction.type || 'Communication'}
+                              </Badge>
+                              {interaction.canal && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {interaction.canal}
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {interaction.created_at && new Date(interaction.created_at).toLocaleDateString('fr-FR', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                          {interaction.sujet && (
+                            <h4 className="font-medium text-sm mb-1">{interaction.sujet}</h4>
+                          )}
+                          {interaction.message && (
+                            <p className="text-sm text-muted-foreground">{interaction.message}</p>
+                          )}
+                          {interaction.workflow_name && (
+                            <div className="flex items-center space-x-1 mt-2">
+                              <span className="text-xs text-blue-600 font-medium">Workflow:</span>
+                              <span className="text-xs text-blue-600">{interaction.workflow_name}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <MessageCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-muted-foreground">Aucune communication pour ce projet</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Interface d'envoi d'emails */}
+            <ProjectEmailInterface 
+              projectId={projet.projet_id}
+            />
           </TabsContent>
         </Tabs>
       </div>
