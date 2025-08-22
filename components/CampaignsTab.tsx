@@ -1,401 +1,414 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+// Transformé en "Historique des envois groupés" avec KPIs détaillés
+
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import { Badge } from "./ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog"
-import { Label } from "./ui/label"
-import { Textarea } from "./ui/textarea"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { Progress } from "./ui/progress"
-import { supabase, supabaseUrl, supabaseAnonKey } from "../lib/supabase"
-import type { Campaign, Contact } from "../lib/types"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
+import { useToast } from "../hooks/use-toast"
+import { supabase } from "../lib/supabase"
+import { 
+  Mail, Calendar, Users, TrendingUp, Eye, AlertCircle, 
+  CheckCircle, XCircle, Clock, BarChart3, PieChart,
+  Target, Send, Loader2
+} from "lucide-react"
 
-interface CampaignsTabProps {
-  campaigns: Campaign[]
-  contacts: Contact[]
-  onCampaignUpdate: () => void
+interface EnvoiGroupe {
+  id: number
+  nom_campagne: string
+  nombre_destinataires: number
+  nombre_envoyes: number
+  nombre_echecs: number
+  template_id?: number
+  statut_cible?: string
+  commercial?: string
+  created_at: string
+  updated_at: string
+  filtre_utilise?: any
 }
 
-interface Segment {
+interface EnvoiEmail {
   id: number
-  nom: string
-  description: string
-  criteres: any
+  campagne_id: number
+  contact_id?: number
+  projet_id?: number
+  email_destinataire: string
+  sujet: string
+  statut: string
+  date_envoi?: string
+  date_ouverture?: string
+  date_clic?: string
+  erreur_message?: string
+  contact?: {
+    prenom: string
+    nom: string
+  }
 }
 
 interface EmailTemplate {
   id: number
   nom: string
   sujet: string
-  contenu_html: string
-  contenu_texte: string
 }
 
-interface EmailConfig {
-  id: number
-  email: string
-  description: string
-}
-
-export function CampaignsTab({ campaigns, contacts, onCampaignUpdate }: CampaignsTabProps) {
+export function CampaignsTab() {
+  const { toast } = useToast()
+  const [envoisGroupes, setEnvoisGroupes] = useState<EnvoiGroupe[]>([])
+  const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [isNewCampaign, setIsNewCampaign] = useState(false)
-  const [isLaunching, setIsLaunching] = useState(false)
-
-  const [segments, setSegments] = useState<Segment[]>([])
-  const [templates, setTemplates] = useState<EmailTemplate[]>([])
-  const [emailConfigs, setEmailConfigs] = useState<EmailConfig[]>([])
-  const [campaignStats, setCampaignStats] = useState<any>({})
-  const [emailSentList, setEmailSentList] = useState<any[]>([])
-  const [showEmailDetails, setShowEmailDetails] = useState<number | null>(null)
+  const [dateFilter, setDateFilter] = useState("all")
+  const [loading, setLoading] = useState(true)
+  
+  // Détails campagne sélectionnée
+  const [selectedCampaign, setSelectedCampaign] = useState<EnvoiGroupe | null>(null)
+  const [campaignEmails, setCampaignEmails] = useState<EnvoiEmail[]>([])
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const [loadingDetails, setLoadingDetails] = useState(false)
 
   useEffect(() => {
-    loadSegments()
-    loadTemplates()
-    loadEmailConfigs()
-    loadCampaignStats()
+    loadData()
   }, [])
 
-  const loadSegments = async () => {
+  const loadData = async () => {
     try {
-      const { data, error } = await supabase.from("segments").select("id, nom, description, criteres").order("nom")
+      setLoading(true)
+      
+      // Charger les envois groupés
+      const { data: envois, error: envoiError } = await supabase
+        .from('envois_groupes')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-      if (error) throw error
-      setSegments(data || [])
+      if (envoiError) throw envoiError
+
+      // Charger les templates
+      const { data: templatesData, error: templateError } = await supabase
+        .from('email_templates')
+        .select('id, nom, sujet')
+
+      if (templateError) throw templateError
+
+      setEnvoisGroupes(envois || [])
+      setTemplates(templatesData || [])
     } catch (error) {
-      console.error("Error loading segments:", error)
+      console.error('Error loading campaigns data:', error)
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger l'historique des envois",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
-  const loadTemplates = async () => {
+  const loadCampaignDetails = async (campaign: EnvoiGroupe) => {
     try {
-      const { data, error } = await supabase
-        .from("email_templates")
-        .select("id, nom, sujet, contenu_html, contenu_texte")
-        .eq("statut", "actif")
-        .order("nom")
-
-      if (error) throw error
-      setTemplates(data || [])
-    } catch (error) {
-      console.error("Error loading templates:", error)
-    }
-  }
-
-  const loadEmailConfigs = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("email_configurations")
-        .select("id, email, description")
-        .eq("is_active", true)
-        .order("email")
-
-      if (error) throw error
-      setEmailConfigs(data || [])
-    } catch (error) {
-      console.error("Error loading email configs:", error)
-    }
-  }
-
-  const loadCampaignStats = async () => {
-    try {
-      const stats: any = {}
-      for (const campaign of campaigns) {
-        // Charger les stats de la campagne
-        const { data: statsData } = await supabase
-          .from('envois_email')
-          .select('*')
-          .eq('campagne_id', campaign.id)
-        
-        if (statsData) {
-          const totalSent = statsData.length
-          const opened = statsData.filter(e => e.date_ouverture).length
-          const clicked = statsData.filter(e => e.date_clic).length
-          const failed = statsData.filter(e => e.statut === 'echec').length
-          
-          stats[campaign.id] = {
-            total_sent: totalSent,
-            opened: opened,
-            clicked: clicked,
-            failed: failed,
-            open_rate: totalSent > 0 ? Math.round((opened / totalSent) * 100) : 0,
-            click_rate: totalSent > 0 ? Math.round((clicked / totalSent) * 100) : 0,
-            emails: statsData
-          }
-        }
-      }
-      setCampaignStats(stats)
-    } catch (error) {
-      console.error("Error loading campaign stats:", error)
-    }
-  }
-
-  const loadEmailSentDetails = async (campaignId: number) => {
-    try {
-      const { data, error } = await supabase
+      setLoadingDetails(true)
+      setSelectedCampaign(campaign)
+      
+      const { data: emails, error } = await supabase
         .from('envois_email')
         .select(`
           *,
-          contact:contact_id (prenom, nom, email)
+          contact:contact_id (prenom, nom)
         `)
-        .eq('campagne_id', campaignId)
+        .eq('campagne_id', campaign.id)
         .order('created_at', { ascending: false })
-      
+
       if (error) throw error
-      setEmailSentList(data || [])
-      setShowEmailDetails(campaignId)
+
+      setCampaignEmails(emails || [])
+      setIsDetailsOpen(true)
     } catch (error) {
-      console.error("Error loading email details:", error)
+      console.error('Error loading campaign details:', error)
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les détails de la campagne",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingDetails(false)
     }
   }
 
-  // Filter campaigns
+  // Filtrage des campagnes
   const filteredCampaigns = useMemo(() => {
-    return campaigns.filter((campaign) => {
-      const matchesSearch =
-        !searchTerm ||
-        campaign.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        campaign.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    return envoisGroupes.filter((campaign) => {
+      const matchesSearch = !searchTerm || 
+        campaign.nom_campagne.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        campaign.commercial?.toLowerCase().includes(searchTerm.toLowerCase())
 
-      const matchesStatus = statusFilter === "all" || campaign.statut === statusFilter
+      const campaignDate = new Date(campaign.created_at)
+      const now = new Date()
+      const matchesDate = dateFilter === "all" ||
+        (dateFilter === "today" && campaignDate.toDateString() === now.toDateString()) ||
+        (dateFilter === "week" && campaignDate >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)) ||
+        (dateFilter === "month" && campaignDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000))
 
-      return matchesSearch && matchesStatus
+      const hasErrors = campaign.nombre_echecs > 0
+      const matchesStatus = statusFilter === "all" ||
+        (statusFilter === "success" && !hasErrors) ||
+        (statusFilter === "errors" && hasErrors)
+
+      return matchesSearch && matchesDate && matchesStatus
     })
-  }, [campaigns, searchTerm, statusFilter])
+  }, [envoisGroupes, searchTerm, dateFilter, statusFilter])
 
-  const getStatusColor = (statut: string) => {
-    switch (statut?.toLowerCase()) {
-      case "en_cours":
+  // Calculs des KPIs globaux
+  const globalStats = useMemo(() => {
+    const totalCampaigns = filteredCampaigns.length
+    const totalSent = filteredCampaigns.reduce((sum, c) => sum + c.nombre_envoyes, 0)
+    const totalErrors = filteredCampaigns.reduce((sum, c) => sum + c.nombre_echecs, 0)
+    const successRate = totalSent > 0 ? ((totalSent - totalErrors) / totalSent * 100) : 0
+
+    return {
+      totalCampaigns,
+      totalSent,
+      totalErrors,
+      successRate: Math.round(successRate * 100) / 100
+    }
+  }, [filteredCampaigns])
+
+  const getStatusColor = (campaign: EnvoiGroupe) => {
+    if (campaign.nombre_echecs === 0) {
+      return "bg-green-100 text-green-800 border-green-200"
+    } else if (campaign.nombre_echecs === campaign.nombre_destinataires) {
+      return "bg-red-100 text-red-800 border-red-200"  
+    } else {
+      return "bg-yellow-100 text-yellow-800 border-yellow-200"
+    }
+  }
+
+  const getStatusText = (campaign: EnvoiGroupe) => {
+    if (campaign.nombre_echecs === 0) {
+      return "Succès complet"
+    } else if (campaign.nombre_echecs === campaign.nombre_destinataires) {
+      return "Échec total"
+    } else {
+      return "Succès partiel"
+    }
+  }
+
+  const getEmailStatusColor = (statut: string) => {
+    switch (statut) {
+      case 'envoye':
         return "bg-green-100 text-green-800"
-      case "brouillon":
-        return "bg-gray-100 text-gray-800"
-      case "planifiee":
-        return "bg-blue-100 text-blue-800"
-      case "terminee":
-        return "bg-purple-100 text-purple-800"
-      case "annulee":
+      case 'echec':
         return "bg-red-100 text-red-800"
+      case 'ouvert':
+        return "bg-blue-100 text-blue-800"
+      case 'clique':
+        return "bg-purple-100 text-purple-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
   }
 
-  const handleCampaignSubmit = async (formData: FormData) => {
-    try {
-      const campaignData = {
-        nom: formData.get("nom") as string,
-        description: formData.get("description") as string,
-        segment_id: Number.parseInt(formData.get("segment_id") as string),
-        template_id: Number.parseInt(formData.get("template_id") as string),
-        email_config_id: Number.parseInt(formData.get("email_config_id") as string),
-        statut: formData.get("statut") as string,
-        date_planifiee: (formData.get("date_planifiee") as string) || null,
-        updated_at: new Date().toISOString(),
-      }
-
-      if (isNewCampaign) {
-        await supabase.from("campagnes_email").insert([
-          {
-            ...campaignData,
-            created_at: new Date().toISOString(),
-          },
-        ])
-      } else if (selectedCampaign) {
-        await supabase.from("campagnes_email").update(campaignData).eq("id", selectedCampaign.id)
-      }
-
-      setIsDialogOpen(false)
-      setSelectedCampaign(null)
-      onCampaignUpdate()
-    } catch (error) {
-      console.error("Error saving campaign:", error)
-    }
-  }
-
-  const handleLaunchCampaign = async (campaignId: number, immediate = false) => {
-    setIsLaunching(true)
-    try {
-      const response = await fetch(`${supabaseUrl}/functions/v1/launch-campaign`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${supabaseAnonKey}`,
-        },
-        body: JSON.stringify({
-          campaignId,
-          immediate,
-          scheduledFor: immediate ? null : new Date().toISOString(),
-        }),
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        console.log("Campaign launched successfully:", result)
-        onCampaignUpdate()
-        loadCampaignStats()
-      } else {
-        console.error("Campaign launch failed:", result.error)
-      }
-    } catch (error) {
-      console.error("Error launching campaign:", error)
-    } finally {
-      setIsLaunching(false)
-    }
-  }
-
-  const openNewCampaignDialog = () => {
-    setSelectedCampaign(null)
-    setIsNewCampaign(true)
-    setIsDialogOpen(true)
-  }
-
-  const openEditCampaignDialog = (campaign: Campaign) => {
-    setSelectedCampaign(campaign)
-    setIsNewCampaign(false)
-    setIsDialogOpen(true)
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center p-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Gestion des Campagnes Email</h2>
-          <p className="text-muted-foreground">{filteredCampaigns.length} campagnes trouvées</p>
+          <h1 className="text-3xl font-bold text-foreground">Historique des Envois Groupés</h1>
+          <p className="text-muted-foreground mt-1">
+            Suivi détaillé des campagnes emails avec statistiques Brevo
+          </p>
         </div>
-        <Button onClick={openNewCampaignDialog} className="bg-orange-600 hover:bg-orange-700">
-          <i className="fas fa-plus mr-2"></i>
-          Nouvelle Campagne
-        </Button>
       </div>
 
-      {/* Filters */}
+      {/* KPIs Globaux */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <Card className="border-0 bg-gradient-to-br from-blue-50 to-blue-100">
+          <CardContent className="p-6 text-center">
+            <div className="flex items-center justify-center space-x-2 mb-2">
+              <Mail className="w-6 h-6 text-blue-600" />
+              <div className="text-3xl font-bold text-blue-600">{globalStats.totalCampaigns}</div>
+            </div>
+            <div className="text-sm text-blue-700 font-medium">Campagnes Totales</div>
+          </CardContent>
+        </Card>
+        
+        <Card className="border-0 bg-gradient-to-br from-green-50 to-green-100">
+          <CardContent className="p-6 text-center">
+            <div className="flex items-center justify-center space-x-2 mb-2">
+              <Send className="w-6 h-6 text-green-600" />
+              <div className="text-3xl font-bold text-green-600">{globalStats.totalSent}</div>
+            </div>
+            <div className="text-sm text-green-700 font-medium">Emails Envoyés</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 bg-gradient-to-br from-red-50 to-red-100">
+          <CardContent className="p-6 text-center">
+            <div className="flex items-center justify-center space-x-2 mb-2">
+              <AlertCircle className="w-6 h-6 text-red-600" />
+              <div className="text-3xl font-bold text-red-600">{globalStats.totalErrors}</div>
+            </div>
+            <div className="text-sm text-red-700 font-medium">Échecs</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 bg-gradient-to-br from-purple-50 to-purple-100">
+          <CardContent className="p-6 text-center">
+            <div className="flex items-center justify-center space-x-2 mb-2">
+              <TrendingUp className="w-6 h-6 text-purple-600" />
+              <div className="text-3xl font-bold text-purple-600">{globalStats.successRate}%</div>
+            </div>
+            <div className="text-sm text-purple-700 font-medium">Taux de Succès</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filtres */}
       <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label htmlFor="search">Rechercher</Label>
-              <Input
-                id="search"
-                placeholder="Nom, description..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="status">Statut</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les statuts</SelectItem>
-                  <SelectItem value="en_cours">En cours</SelectItem>
-                  <SelectItem value="brouillon">Brouillon</SelectItem>
-                  <SelectItem value="planifiee">Planifiée</SelectItem>
-                  <SelectItem value="terminee">Terminée</SelectItem>
-                  <SelectItem value="annulee">Annulée</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm("")
-                  setStatusFilter("all")
-                }}
-              >
-                <i className="fas fa-times mr-2"></i>
-                Réinitialiser
-              </Button>
-            </div>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Input
+              placeholder="Rechercher une campagne..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Statut" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les statuts</SelectItem>
+                <SelectItem value="success">Succès complet</SelectItem>
+                <SelectItem value="errors">Avec erreurs</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={dateFilter} onValueChange={setDateFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Période" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes les périodes</SelectItem>
+                <SelectItem value="today">Aujourd'hui</SelectItem>
+                <SelectItem value="week">Cette semaine</SelectItem>
+                <SelectItem value="month">Ce mois</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchTerm("")
+                setStatusFilter("all")
+                setDateFilter("all")
+              }}
+            >
+              Réinitialiser
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Campaigns Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Liste des campagnes */}
+      <div className="grid gap-4">
         {filteredCampaigns.map((campaign) => {
-          const stats = campaignStats[campaign.id] || {}
+          const template = templates.find(t => t.id === campaign.template_id)
+          const successRate = campaign.nombre_destinataires > 0 
+            ? Math.round((campaign.nombre_envoyes - campaign.nombre_echecs) / campaign.nombre_destinataires * 100)
+            : 0
+
           return (
-            <Card key={campaign.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{campaign.nom}</CardTitle>
-                  <Badge className={getStatusColor(campaign.statut)}>{campaign.statut}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground line-clamp-2">{campaign.description}</p>
-
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="text-center p-2 bg-blue-50 rounded">
-                      <div className="font-semibold text-blue-600">{stats.total_sent || 0}</div>
-                      <div className="text-xs text-muted-foreground">Envoyés</div>
+            <Card key={campaign.id} className="hover:shadow-md transition-all duration-200">
+              <CardContent className="p-6">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-3">
+                      <h3 className="text-lg font-semibold">{campaign.nom_campagne}</h3>
+                      <Badge className={getStatusColor(campaign)}>
+                        {getStatusText(campaign)}
+                      </Badge>
                     </div>
-                    <div className="text-center p-2 bg-green-50 rounded">
-                      <div className="font-semibold text-green-600">{stats.open_rate || 0}%</div>
-                      <div className="text-xs text-muted-foreground">Ouverture</div>
-                    </div>
-                  </div>
 
-                  {campaign.statut === "en_cours" && stats.total_sent > 0 && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span>Progression</span>
-                        <span>
-                          {stats.total_sent}/{campaign.contact_count || 0}
-                        </span>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div className="text-center p-3 bg-gray-50 rounded-lg">
+                        <div className="text-2xl font-bold text-gray-700">{campaign.nombre_destinataires}</div>
+                        <div className="text-xs text-muted-foreground">Destinataires</div>
                       </div>
-                      <Progress
-                        value={campaign.contact_count ? (stats.total_sent / campaign.contact_count) * 100 : 0}
-                        className="h-2"
-                      />
+                      <div className="text-center p-3 bg-green-50 rounded-lg">
+                        <div className="text-2xl font-bold text-green-600">{campaign.nombre_envoyes}</div>
+                        <div className="text-xs text-muted-foreground">Envoyés</div>
+                      </div>
+                      <div className="text-center p-3 bg-red-50 rounded-lg">
+                        <div className="text-2xl font-bold text-red-600">{campaign.nombre_echecs}</div>
+                        <div className="text-xs text-muted-foreground">Échecs</div>
+                      </div>
+                      <div className="text-center p-3 bg-blue-50 rounded-lg">
+                        <div className="text-2xl font-bold text-blue-600">{successRate}%</div>
+                        <div className="text-xs text-muted-foreground">Succès</div>
+                      </div>
                     </div>
-                  )}
 
-                  <div className="flex items-center space-x-2 text-sm">
-                    <i className="fas fa-calendar text-muted-foreground w-4"></i>
-                    <span>{new Date(campaign.created_at).toLocaleDateString("fr-FR")}</span>
+                    {campaign.nombre_destinataires > 0 && (
+                      <div className="mb-4">
+                        <div className="flex justify-between text-sm mb-2">
+                          <span>Progression</span>
+                          <span>{campaign.nombre_envoyes}/{campaign.nombre_destinataires}</span>
+                        </div>
+                        <Progress value={(campaign.nombre_envoyes / campaign.nombre_destinataires) * 100} className="h-2" />
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4" />
+                        {new Date(campaign.created_at).toLocaleDateString('fr-FR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                      {template && (
+                        <div className="flex items-center gap-1">
+                          <Mail className="h-4 w-4" />
+                          {template.nom}
+                        </div>
+                      )}
+                      {campaign.commercial && (
+                        <div className="flex items-center gap-1">
+                          <Users className="h-4 w-4" />
+                          {campaign.commercial}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                <div className="mt-4 flex space-x-2">
-                  <Button size="sm" variant="outline" onClick={() => openEditCampaignDialog(campaign)}>
-                    <i className="fas fa-edit mr-1"></i>
-                    Modifier
-                  </Button>
-                  {campaign.statut === "brouillon" && (
+                  <div className="flex gap-2">
                     <Button
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700"
-                      onClick={() => handleLaunchCampaign(campaign.id, true)}
-                      disabled={isLaunching}
-                    >
-                      <i className="fas fa-paper-plane mr-1"></i>
-                      Lancer
-                    </Button>
-                  )}
-                  {(campaign.statut === "en_cours" || campaign.statut === "terminee") && (
-                    <Button 
-                      size="sm" 
                       variant="outline"
-                      onClick={() => loadEmailSentDetails(campaign.id)}
+                      size="sm"
+                      onClick={() => loadCampaignDetails(campaign)}
+                      disabled={loadingDetails}
+                      className="gap-2"
                     >
-                      <i className="fas fa-envelope mr-1"></i>
-                      Emails ({stats.total_sent || 0})
+                      <Eye className="h-4 w-4" />
+                      Détails
                     </Button>
-                  )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -403,257 +416,210 @@ export function CampaignsTab({ campaigns, contacts, onCampaignUpdate }: Campaign
         })}
       </div>
 
-      {/* Dialog des emails envoyés */}
-      <Dialog open={showEmailDetails !== null} onOpenChange={() => setShowEmailDetails(null)}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      {filteredCampaigns.length === 0 && (
+        <Card>
+          <CardContent className="p-12 text-center">
+            <Mail className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">Aucune campagne trouvée</h3>
+            <p className="text-muted-foreground">
+              Aucun envoi groupé ne correspond à vos critères de recherche.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Dialog Détails Campagne */}
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              Détail des emails envoyés - Campagne {campaigns.find(c => c.id === showEmailDetails)?.nom}
+            <DialogTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Détails de la campagne : {selectedCampaign?.nom_campagne}
             </DialogTitle>
           </DialogHeader>
 
-          {showEmailDetails && campaignStats[showEmailDetails] && (
-            <div className="space-y-6">
-              {/* KPIs de la campagne */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="p-4 text-center">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {campaignStats[showEmailDetails].total_sent || 0}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Emails envoyés</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-4 text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {campaignStats[showEmailDetails].opened || 0}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Ouvertures</div>
-                    <div className="text-xs text-muted-foreground">
-                      {campaignStats[showEmailDetails].open_rate || 0}%
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-4 text-center">
-                    <div className="text-2xl font-bold text-purple-600">
-                      {campaignStats[showEmailDetails].clicked || 0}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Clics</div>
-                    <div className="text-xs text-muted-foreground">
-                      {campaignStats[showEmailDetails].click_rate || 0}%
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-4 text-center">
-                    <div className="text-2xl font-bold text-red-600">
-                      {campaignStats[showEmailDetails].failed || 0}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Échecs</div>
-                  </CardContent>
-                </Card>
-              </div>
+          {selectedCampaign && (
+            <Tabs defaultValue="overview" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="overview">Vue d'ensemble</TabsTrigger>
+                <TabsTrigger value="emails">Emails ({campaignEmails.length})</TabsTrigger>
+                <TabsTrigger value="analytics">Analytics</TabsTrigger>
+              </TabsList>
 
-              {/* Liste des emails */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Liste des emails envoyés</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {emailSentList.map((email) => (
-                      <div 
-                        key={email.id} 
-                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
-                      >
-                        <div className="flex-1">
-                          <div className="font-medium">
-                            {email.contact?.prenom} {email.contact?.nom}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {email.email_destinataire}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Envoyé le {new Date(email.date_envoi || email.created_at).toLocaleString('fr-FR')}
-                          </div>
+              <TabsContent value="overview" className="space-y-6 mt-6">
+                {/* KPIs détaillés */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <Users className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-blue-600">{selectedCampaign.nombre_destinataires}</div>
+                      <div className="text-sm text-muted-foreground">Destinataires</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-green-600">{selectedCampaign.nombre_envoyes}</div>
+                      <div className="text-sm text-muted-foreground">Envoyés</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <XCircle className="h-8 w-8 text-red-600 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-red-600">{selectedCampaign.nombre_echecs}</div>
+                      <div className="text-sm text-muted-foreground">Échecs</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4 text-center">
+                      <Target className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-purple-600">
+                        {selectedCampaign.nombre_destinataires > 0 
+                          ? Math.round((selectedCampaign.nombre_envoyes - selectedCampaign.nombre_echecs) / selectedCampaign.nombre_destinataires * 100)
+                          : 0}%
+                      </div>
+                      <div className="text-sm text-muted-foreground">Taux Succès</div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Informations détaillées */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Informations de la campagne</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-6">
+                      <div>
+                        <h4 className="font-medium mb-3">Paramètres</h4>
+                        <div className="space-y-2 text-sm">
+                          <div><strong>Créée le :</strong> {new Date(selectedCampaign.created_at).toLocaleString('fr-FR')}</div>
+                          <div><strong>Modifiée le :</strong> {new Date(selectedCampaign.updated_at).toLocaleString('fr-FR')}</div>
+                          {selectedCampaign.commercial && <div><strong>Commercial :</strong> {selectedCampaign.commercial}</div>}
+                          {selectedCampaign.statut_cible && <div><strong>Statut ciblé :</strong> {selectedCampaign.statut_cible}</div>}
                         </div>
-                        
-                        <div className="flex items-center gap-2">
-                          <Badge 
-                            variant={
-                              email.statut === 'envoye' ? 'default' :
-                              email.statut === 'echec' ? 'destructive' : 'secondary'
-                            }
-                          >
-                            {email.statut === 'envoye' ? 'Envoyé' : 
-                             email.statut === 'echec' ? 'Échec' : 'En attente'}
-                          </Badge>
-                          
-                          {email.date_ouverture && (
-                            <Badge variant="secondary" className="bg-green-100 text-green-800">
-                              ✓ Ouvert
-                            </Badge>
-                          )}
-                          
-                          {email.date_clic && (
-                            <Badge variant="secondary" className="bg-purple-100 text-purple-800">
-                              ✓ Cliqué
-                            </Badge>
+                      </div>
+                      <div>
+                        <h4 className="font-medium mb-3">Template utilisé</h4>
+                        <div className="text-sm">
+                          {templates.find(t => t.id === selectedCampaign.template_id) ? (
+                            <div className="p-3 bg-gray-50 rounded">
+                              <div><strong>{templates.find(t => t.id === selectedCampaign.template_id)?.nom}</strong></div>
+                              <div className="text-muted-foreground mt-1">
+                                {templates.find(t => t.id === selectedCampaign.template_id)?.sujet}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-muted-foreground">Template personnalisé ou supprimé</div>
                           )}
                         </div>
                       </div>
-                    ))}
-                    
-                    {emailSentList.length === 0 && (
-                      <div className="text-center text-muted-foreground py-8">
-                        Aucun email trouvé pour cette campagne
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="emails" className="space-y-4 mt-6">
+                <div className="max-h-96 overflow-y-auto space-y-2">
+                  {campaignEmails.map((email) => (
+                    <Card key={email.id} className="border-l-4 border-l-gray-200">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="font-medium">
+                                {email.contact?.prenom} {email.contact?.nom}
+                              </div>
+                              <Badge className={getEmailStatusColor(email.statut)}>
+                                {email.statut}
+                              </Badge>
+                            </div>
+                            <div className="text-sm text-muted-foreground">{email.email_destinataire}</div>
+                            <div className="text-sm font-medium mt-1">{email.sujet}</div>
+                          </div>
+                          <div className="text-right text-sm text-muted-foreground">
+                            {email.date_envoi && (
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {new Date(email.date_envoi).toLocaleString('fr-FR')}
+                              </div>
+                            )}
+                            {email.erreur_message && (
+                              <div className="text-red-600 mt-1 max-w-xs">
+                                <AlertCircle className="h-3 w-3 inline mr-1" />
+                                {email.erreur_message}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="analytics" className="space-y-6 mt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Répartition des statuts */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <PieChart className="h-5 w-5" />
+                        Répartition des statuts
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {[
+                          { status: 'envoye', label: 'Envoyés avec succès', color: 'bg-green-500' },
+                          { status: 'echec', label: 'Échecs', color: 'bg-red-500' },
+                          { status: 'ouvert', label: 'Ouvertures', color: 'bg-blue-500' },
+                          { status: 'clique', label: 'Clics', color: 'bg-purple-500' }
+                        ].map(({ status, label, color }) => {
+                          const count = campaignEmails.filter(e => e.statut === status).length
+                          const percentage = campaignEmails.length > 0 ? (count / campaignEmails.length * 100) : 0
+                          
+                          return (
+                            <div key={status} className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className={`w-3 h-3 rounded-full ${color}`}></div>
+                                <span className="text-sm">{label}</span>
+                              </div>
+                              <div className="text-sm font-medium">
+                                {count} ({percentage.toFixed(1)}%)
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Timeline */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Timeline d'envoi</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm text-muted-foreground space-y-2">
+                        <div>
+                          <strong>Démarrage :</strong> {new Date(selectedCampaign.created_at).toLocaleString('fr-FR')}
+                        </div>
+                        <div>
+                          <strong>Dernière mise à jour :</strong> {new Date(selectedCampaign.updated_at).toLocaleString('fr-FR')}
+                        </div>
+                        <div>
+                          <strong>Durée totale :</strong> {
+                            Math.round((new Date(selectedCampaign.updated_at).getTime() - new Date(selectedCampaign.created_at).getTime()) / (1000 * 60))
+                          } minutes
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+            </Tabs>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{isNewCampaign ? "Nouvelle Campagne Email" : "Modifier la Campagne"}</DialogTitle>
-          </DialogHeader>
-
-          <Tabs defaultValue="general" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="general">Général</TabsTrigger>
-              <TabsTrigger value="targeting">Ciblage</TabsTrigger>
-              <TabsTrigger value="content">Contenu</TabsTrigger>
-            </TabsList>
-
-            <form onSubmit={(e) => { e.preventDefault(); handleCampaignSubmit(new FormData(e.currentTarget)); }} className="space-y-4">
-              <TabsContent value="general" className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="nom">Nom de la campagne *</Label>
-                    <Input id="nom" name="nom" defaultValue={selectedCampaign?.nom || ""} required />
-                  </div>
-                  <div>
-                    <Label htmlFor="statut">Statut</Label>
-                    <Select name="statut" defaultValue={selectedCampaign?.statut || "brouillon"}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="brouillon">Brouillon</SelectItem>
-                        <SelectItem value="planifiee">Planifiée</SelectItem>
-                        <SelectItem value="en_cours">En cours</SelectItem>
-                        <SelectItem value="terminee">Terminée</SelectItem>
-                        <SelectItem value="annulee">Annulée</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    name="description"
-                    defaultValue={selectedCampaign?.description || ""}
-                    rows={2}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="date_planifiee">Date planifiée (optionnel)</Label>
-                    <Input
-                      id="date_planifiee"
-                      name="date_planifiee"
-                      type="datetime-local"
-                      defaultValue={
-                        selectedCampaign?.date_planifiee
-                          ? new Date(selectedCampaign.date_planifiee).toISOString().slice(0, 16)
-                          : ""
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="email_config_id">Configuration Email</Label>
-                    <Select name="email_config_id" defaultValue={selectedCampaign?.email_config_id?.toString() || "2"}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {emailConfigs.map((config) => (
-                          <SelectItem key={config.id} value={config.id.toString()}>
-                            {config.email} - {config.description}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="targeting" className="space-y-4">
-                <div>
-                  <Label htmlFor="segment_id">Segment cible *</Label>
-                  <Select name="segment_id" defaultValue={selectedCampaign?.segment_id?.toString() || ""} required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un segment" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {segments.map((segment) => (
-                        <SelectItem key={segment.id} value={segment.id.toString()}>
-                          {segment.nom} - {segment.description}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="content" className="space-y-4">
-                <div>
-                  <Label htmlFor="template_id">Template Email *</Label>
-                  <Select name="template_id" defaultValue={selectedCampaign?.template_id?.toString() || ""} required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {templates.map((template) => (
-                        <SelectItem key={template.id} value={template.id.toString()}>
-                          {template.nom} - {template.sujet}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Template preview */}
-                {templates.length > 0 && (
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <h4 className="font-medium mb-2">Aperçu du template sélectionné</h4>
-                    <div className="text-sm text-gray-600">
-                      Variables disponibles: {"{prenom}"}, {"{nom}"}, {"{civilite}"}, {"{email}"}
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-
-              <div className="flex justify-end space-x-2 pt-4 border-t">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Annuler
-                </Button>
-                <Button type="submit" className="bg-orange-600 hover:bg-orange-700">
-                  {isNewCampaign ? "Créer la Campagne" : "Modifier la Campagne"}
-                </Button>
-              </div>
-            </form>
-          </Tabs>
         </DialogContent>
       </Dialog>
     </div>
