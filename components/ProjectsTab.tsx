@@ -277,13 +277,18 @@ export function ProjectsTab() {
               to: recipient.email,
               subject: personalizedSubject,
               html: personalizedHtml,
-              text: personalizedText,
-              projectId: recipient.projectId,
-              campaignId: campaign.id
+              text: personalizedText
             }
           })
 
-          if (emailError) throw emailError
+          if (emailError) {
+            console.error('Erreur edge function:', emailError)
+            throw new Error(emailError.message || 'Erreur lors de l\'envoi')
+          }
+
+          if (!emailResult?.success) {
+            throw new Error(emailResult?.error || 'Échec de l\'envoi de l\'email')
+          }
 
           console.log(`Email envoyé avec succès à ${recipient.email}:`, emailResult)
           successCount++

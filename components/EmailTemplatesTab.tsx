@@ -123,7 +123,14 @@ export function EmailTemplatesTab({ templates, segments, onTemplateUpdate }: Ema
       contenu_texte: template.contenu_texte || '',
       categorie: template.categorie || 'prospection',
       statut: template.statut || 'active',
-      variables: template.variables || {
+      variables: (template.variables as {
+        nom_client: string
+        prenom: string
+        nom: string
+        nom_commercial: string
+        lien_rdv: string
+        infos_premunia: string
+      }) || {
         nom_client: 'Nom complet du client',
         prenom: 'Prénom du client',
         nom: 'Nom de famille du client',

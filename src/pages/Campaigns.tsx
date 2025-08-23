@@ -41,11 +41,7 @@ export default function CampaignsPage() {
 
   return (
     <Layout title="Gestion des Campagnes">
-      <CampaignsTab 
-        campaigns={campaigns} 
-        contacts={contacts} 
-        onCampaignUpdate={loadData} 
-      />
+      <CampaignsTab />
     </Layout>
   )
 }
