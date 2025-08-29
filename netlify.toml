@@ -3,26 +3,16 @@
   command = "npm run build"
 
 [build.environment]
-  NODE_VERSION = "18"
-  NODE_ENV = "production"  # ✅ Nécessaire pour le mode production
-  SUPABASE_PROJECT_ID = "wybhtprxiwgzmpmnfceq"
-  # ⚠️ Garde les secrets (clé privée) uniquement dans le Dashboard Netlify, pas ici !
-  # SUPABASE_PRIVATE_KEY = "your-private-key-here"
+  NODE_VERSION = "22"
+  # Variables VITE_ pour React + Supabase
+  VITE_SUPABASE_URL = "https://wybhtprxiwgzmpmnfceq.supabase.co"
+  # VITE_SUPABASE_ANON_KEY = (à ajouter dans Netlify dashboard, jamais en clair)
 
-# Headers de sécurité
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://wybhtprxiwgzmpmnfceq.supabase.co;"
-
-# Redirects pour React SPA
+# Redirect SPA pour React
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
 
   
