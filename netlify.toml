@@ -4,7 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  # ❌ ne pas forcer NODE_ENV ici !
+  NODE_ENV = "production"  # ✅ Nécessaire pour le mode production
   SUPABASE_PROJECT_ID = "wybhtprxiwgzmpmnfceq"
   # ⚠️ Garde les secrets (clé privée) uniquement dans le Dashboard Netlify, pas ici !
   # SUPABASE_PRIVATE_KEY = "your-private-key-here"
@@ -24,3 +24,5 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+  
