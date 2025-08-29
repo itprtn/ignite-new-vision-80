@@ -1,15 +1,10 @@
 [build]
   publish = "dist"
   command = "npm run build"
-  environment = "NODE_VERSION=18"
 
 [build.environment]
+  NODE_VERSION = "18"
   NODE_ENV = "production"
-
-# Variables d'environnement SENSIBLES (pas exposées au client)
-[build.environment]
-  SUPABASE_PROJECT_ID = "wybhtprxiwgzmpmnfceq"
-  SUPABASE_PRIVATE_KEY = "your-private-key-here" # ⚠️ À CONFIGURER DANS NETLIFY DASHBOARD
 
 # Headers de sécurité CRITIQUES
 [[headers]]
@@ -19,12 +14,10 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://wybhtprxiwgzmpmnfceq.supabase.co;"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self';"
 
 # Redirects pour SPA
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
-  
