@@ -4,9 +4,12 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  NODE_ENV = "production"
+  # ❌ ne pas forcer NODE_ENV ici !
+  SUPABASE_PROJECT_ID = "wybhtprxiwgzmpmnfceq"
+  # ⚠️ Garde les secrets (clé privée) uniquement dans le Dashboard Netlify, pas ici !
+  # SUPABASE_PRIVATE_KEY = "your-private-key-here"
 
-# Headers de sécurité CRITIQUES
+# Headers de sécurité
 [[headers]]
   for = "/*"
   [headers.values]
@@ -14,9 +17,9 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self';"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://wybhtprxiwgzmpmnfceq.supabase.co;"
 
-# Redirects pour SPA
+# Redirects pour React SPA
 [[redirects]]
   from = "/*"
   to = "/index.html"
